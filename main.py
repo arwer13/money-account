@@ -5,6 +5,23 @@ import bisect
 from functools import total_ordering
 from dateutil import rrule
 from pprint import pprint
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+g_money_txt_path = "/home/arwer/Notes/money.txt"
+
+
+html_template = """<html>
+<head><title>{title}</title></head>
+<body>
+<h1>Total: {total_value:.0f} </h1> </br>
+<h1>Current weak: {spent_on_current_week:.0f} </h1>
+
+
+</body>
+</html>"""
+
+
 
 @total_ordering
 class Entry:
@@ -50,12 +67,19 @@ class Bookkeeper:
     def __init__(self):
         self.entries = []
 
+    def closest_monday(self, date):
+        while date.weekday() != 0:
+            date -= datetime.timedelta(days=1)
+        return date
+
     def process(self, e):
         if e != Entry():
             bisect.insort_left(self.entries, e)
 
-    def get_total_value(self):
-        return sum([e.value for e in self.entries])
+    def get_total_value(self, entries=None):
+        if entries is None:
+            entries = self.entries
+        return sum([e.value for e in entries])
 
     def expenses_by_period(self, begin, end):
         return list(filter(lambda x: begin <= x.time < end and x.value < 0, self.entries))
@@ -78,18 +102,47 @@ class Bookkeeper:
             result[(begin, end)] = -sum(a.value for a in es)
         return result
 
+    def spent_on_current_week(self):
+        start_date = self.closest_monday(datetime.date.today())
+        finish_date = datetime.date.today() + datetime.timedelta(days=1)
+        es = self.expenses_by_period(start_date, finish_date)
+        return -self.get_total_value(es)
+
+
+class HttpTestServer(BaseHTTPRequestHandler):
+
+    def load_data(self):
+        bk = Bookkeeper()
+        with open(g_money_txt_path, "r") as ff:
+            text = ff.read()
+        start_index = text.find("\n\n\n")
+        if start_index != -1: text = text[start_index:]
+        bk = Bookkeeper()
+        for line in text.split("\n"):
+            e = Entry(line)
+            bk.process(e)
+        return bk
+
+    def do_GET(self):
+        bk = self.load_data()
+        fields = dict()
+        fields["title"] = "Welcome!"
+        fields["total_value"] = bk.get_total_value()
+        fields["spent_on_current_week"] = bk.spent_on_current_week()
+        html = html_template.format(**fields)
+
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(html.encode('utf-8'))
+
+
 
 if __name__ == "__main__":
-    file_path = "/home/arwer/Notes/money.txt"
-    with open(file_path, "r") as ff:
-        text = ff.read()
-    start_index = text.find("\n\n\n")
-    if start_index != -1: text = text[start_index:]
-    bk = Bookkeeper()
-    for line in text.split("\n"):
-        e = Entry(line)
-        bk.process(e)
-    print(bk.get_total_value())
-    weakly = bk.every_calendar_weak()
-    pprint(weakly)
-    pprint(bk.expenses_by_cats(["food","water"]))
+    the_server = HTTPServer(("localhost", 13013), HttpTestServer)
+    try:
+        the_server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+    the_server.server_close()
