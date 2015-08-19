@@ -2,8 +2,9 @@
 import unittest
 from main import *
 import datetime
+import html_stuff
 
-class TestSomething(unittest.TestCase):
+class TestEntry(unittest.TestCase):
 
     def test_full_line(self):
         line = "2015.07.09   food, milk; tinned food, tag2 67+77,3+51+41+57.0+36+40"
@@ -35,6 +36,21 @@ class TestSomething(unittest.TestCase):
     def test_whitespace_or_empty_line(self):
         self.assertEqual(Entry(""), Entry())
         self.assertEqual(Entry("     "), Entry())
+
+
+class TestHtmlStuff(unittest.TestCase):
+
+    def test_make_html_table(self):
+        table = [
+            ["cats", "dogs", "platypuses"],
+            [1,2,3]
+        ]
+        html_should_be = """<table>
+<tr><td>cats</td><td>dogs</td><td>platypuses</td></tr>
+<tr><td>1</td><td>2</td><td>3</td></tr>
+</table>"""
+        html = html_stuff.make_table(table)
+        self.assertEqual(html, html_should_be)
 
 
 if __name__ == "__main__":

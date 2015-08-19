@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from cgitb import html
+from collections import defaultdict
 import re
 import datetime
 import bisect
@@ -6,21 +8,9 @@ from functools import total_ordering
 from dateutil import rrule
 from pprint import pprint
 from http.server import BaseHTTPRequestHandler, HTTPServer
-
+import html_stuff
 
 g_money_txt_path = "/home/arwer/Notes/money.txt"
-
-
-html_template = """<html>
-<head><title>{title}</title></head>
-<body>
-<h1>Total: {total_value:.0f} </h1> </br>
-<h1>Current weak: {spent_on_current_week:.0f} </h1>
-
-
-</body>
-</html>"""
-
 
 
 @total_ordering
@@ -42,7 +32,7 @@ class Entry:
         value_gr = value_gr.replace(',', '.')
 
         cats, tags = map(str.strip, desc_gr.split(';'))
-        self.cats = list(filter(None, map(str.strip, cats.split(','))))
+        self.cats = tuple(filter(None, map(str.strip, cats.split(','))))
         self.tags = set(filter(None, map(str.strip, tags.split(','))))
         self.time = datetime.date(*map(int, date_gr.split('.')))
         self.value = eval(value_gr) if value_gr[0] == '+' else -eval(value_gr)
@@ -108,6 +98,20 @@ class Bookkeeper:
         es = self.expenses_by_period(start_date, finish_date)
         return -self.get_total_value(es)
 
+    def expenses_by_top_categories(self, entries=None):
+        if entries is None:
+            entries = self.entries
+        result = defaultdict(float)
+        for x in filter(lambda  x: x.value < 0, entries):
+            result[x.cats[:1]] += -x.value
+        return result
+
+    def all_categories(self):
+        result = set()
+        for et in self.entries:
+            result.add(et.cats)
+        return result
+
 
 class HttpTestServer(BaseHTTPRequestHandler):
 
@@ -129,7 +133,24 @@ class HttpTestServer(BaseHTTPRequestHandler):
         fields["title"] = "Welcome!"
         fields["total_value"] = bk.get_total_value()
         fields["spent_on_current_week"] = bk.spent_on_current_week()
-        html = html_template.format(**fields)
+
+        expenses_weekly = bk.every_calendar_weak()
+        expenses_array = [[], []]
+        for i, period in enumerate(sorted(expenses_weekly.keys())):
+            begin = period[0].strftime("%d.%m")
+            end = (period[1] - datetime.timedelta(days=1)).strftime("%d.%m")
+            expenses_array[0].append("{}-{}".format(begin, end))
+            expenses_array[1].append("{:.0f}".format(expenses_weekly[period]))
+        fields["selected_expenses_weekly"] = html_stuff.make_table(expenses_array)
+
+        expenses_by_categories = bk.expenses_by_top_categories()
+        array = [[], []]
+        for cat, value in sorted(expenses_by_categories.items(), key=lambda x: x[1], reverse=True):
+            array[0].append(", ".join(cat))
+            array[1].append("{:.0f}".format(value))
+        fields["expenses_by_categories"] = html_stuff.make_table(array)
+
+        html = html_stuff.html_template.format(**fields)
 
         self.send_response(200)
         self.send_header("Content-type", "text/html")
