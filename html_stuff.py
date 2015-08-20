@@ -7,6 +7,9 @@ html_template = """<html>
 <h1>Selected expenses weekly*</h1>
 {selected_expenses_weekly}
 
+<h1>Expenses monthly by categories</h1>
+{monthly_by_categories}
+
 <h1>Expenses by categories</h1>
 {expenses_by_categories}
 </body>

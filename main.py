@@ -6,6 +6,7 @@ import datetime
 import bisect
 from functools import total_ordering
 from dateutil import rrule
+from dateutil.relativedelta import relativedelta
 from pprint import pprint
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
@@ -64,6 +65,11 @@ class Bookkeeper:
             date -= datetime.timedelta(days=1)
         return date
 
+    def closest_month_beginning(self, date):
+        while date.day != 11:
+            date -= datetime.timedelta(days=1)
+        return date
+
     def process(self, e):
         if e != Entry():
             bisect.insort_left(self.entries, e)
@@ -87,22 +93,30 @@ class Bookkeeper:
 
     def every_calendar_weak(self):
         result = dict()
-        start_date = min(e.time for e in self.entries)
-        while start_date.weekday() != 0:
-            start_date -= datetime.timedelta(days=1)
+        start_date = self.closest_monday(min(e.time for e in self.entries))
         for dt in rrule.rrule(rrule.WEEKLY, dtstart=start_date, until=datetime.date.today()):
             begin, end = dt.date(), dt.date() + datetime.timedelta(days=7)
             es = list(filter(lambda x: begin <= x.time < end and x.value < 0, self.filter_by_cats(config.weekly_categories)))
             result[(begin, end)] = -sum(a.value for a in es)
         return result
 
-
     def expenses_by_top_categories(self, entries=None):
         if entries is None:
             entries = self.entries
         result = defaultdict(float)
-        for x in filter(lambda  x: x.value < 0, entries):
+        for x in filter(lambda x: x.value < 0, entries):
             result[x.cats[:1]] += -x.value
+        return result
+
+    def monthly_by_categories(self):
+        start_date = self.closest_month_beginning(min(e.time for e in self.entries))
+        result = defaultdict(list)
+        for dt in rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=datetime.date.today()):
+            begin, end = dt.date(), dt.date() + relativedelta(months=1)
+            es = list(filter(lambda x: begin <= x.time < end, self.entries))
+            for entry in es:
+                result[(begin, end)].append(entry)
+        result = {k: self.expenses_by_top_categories(v) for k, v in result.items()}
         return result
 
     def all_categories(self):
@@ -148,6 +162,20 @@ class HttpTestServer(BaseHTTPRequestHandler):
             array[0].append(", ".join(cat))
             array[1].append("{:.0f}".format(value))
         fields["expenses_by_categories"] = html_stuff.make_table(array)
+
+        monthly_by_categories = bk.monthly_by_categories()
+        all_categories = list({c for mv in monthly_by_categories.values() for c in mv})
+        all_categories = sorted(all_categories,
+                                key=lambda cc: sum([mm[cc] for mm in monthly_by_categories.values()]), reverse=True)
+        array = [["Month", "All"] + [c[0] for c in all_categories]]
+        for m in sorted(monthly_by_categories.keys()):
+            mv = monthly_by_categories[m]
+            row = ["{} {} ({}-{})".format(m[0].strftime("%Y"), m[0].strftime("%B"), m[0].strftime("%d.%m"), (m[1]-relativedelta(days=1)).strftime("%d.%m")),
+                   "{:.0f}".format(sum(mv.values()))]
+            for c in all_categories:
+                row.append("{:.0f}".format(mv.get(c, 0)))
+            array.append(row)
+        fields["monthly_by_categories"] = html_stuff.make_table(array)
 
         html = html_stuff.html_template.format(**fields)
 
