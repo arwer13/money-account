@@ -3,7 +3,6 @@ html_template = """<html>
 <head><title>{title}</title></head>
 <body>
 <h1>Total: {total_value:.0f} </h1> </br>
-<h1>Current week: {spent_on_current_week:.0f} </h1>
 
 <h1>Selected expenses weekly*</h1>
 {selected_expenses_weekly}

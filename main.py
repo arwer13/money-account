@@ -8,9 +8,12 @@ from functools import total_ordering
 from dateutil import rrule
 from pprint import pprint
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import html_stuff
+import os
+import importlib
 
-g_money_txt_path = "/home/arwer/Notes/money.txt"
+import html_stuff
+import config
+
 
 
 @total_ordering
@@ -51,7 +54,6 @@ class Entry:
         return self.time >= other.time
 
 
-
 class Bookkeeper:
 
     def __init__(self):
@@ -74,11 +76,13 @@ class Bookkeeper:
     def expenses_by_period(self, begin, end):
         return list(filter(lambda x: begin <= x.time < end and x.value < 0, self.entries))
 
-    def expenses_by_cats(self, cats):
+    def filter_by_cats(self, cats):
         result = []
         for e in self.entries:
-            if len(e.cats) >= len(cats) and all([e.cats[i] == cats[i] for i in range(len(cats))]):
-                result.append(e)
+            for c in cats:
+                if len(e.cats) >= len(c) and all([e.cats[i] == c[i] for i in range(len(c))]):
+                    result.append(e)
+                    continue
         return result
 
     def every_calendar_weak(self):
@@ -88,15 +92,10 @@ class Bookkeeper:
             start_date -= datetime.timedelta(days=1)
         for dt in rrule.rrule(rrule.WEEKLY, dtstart=start_date, until=datetime.date.today()):
             begin, end = dt.date(), dt.date() + datetime.timedelta(days=7)
-            es = list(filter(lambda x: begin <= x.time < end and x.value < 0, self.entries))
+            es = list(filter(lambda x: begin <= x.time < end and x.value < 0, self.filter_by_cats(config.weekly_categories)))
             result[(begin, end)] = -sum(a.value for a in es)
         return result
 
-    def spent_on_current_week(self):
-        start_date = self.closest_monday(datetime.date.today())
-        finish_date = datetime.date.today() + datetime.timedelta(days=1)
-        es = self.expenses_by_period(start_date, finish_date)
-        return -self.get_total_value(es)
 
     def expenses_by_top_categories(self, entries=None):
         if entries is None:
@@ -116,8 +115,8 @@ class Bookkeeper:
 class HttpTestServer(BaseHTTPRequestHandler):
 
     def load_data(self):
-        bk = Bookkeeper()
-        with open(g_money_txt_path, "r") as ff:
+        money_txt_path = os.environ.get("MONEY_TXT_PATH", config.money_txt_path)
+        with open(money_txt_path, "r") as ff:
             text = ff.read()
         start_index = text.find("\n\n\n")
         if start_index != -1: text = text[start_index:]
@@ -128,11 +127,11 @@ class HttpTestServer(BaseHTTPRequestHandler):
         return bk
 
     def do_GET(self):
+        importlib.reload(config)
         bk = self.load_data()
         fields = dict()
         fields["title"] = "Welcome!"
         fields["total_value"] = bk.get_total_value()
-        fields["spent_on_current_week"] = bk.spent_on_current_week()
 
         expenses_weekly = bk.every_calendar_weak()
         expenses_array = [[], []]
@@ -160,7 +159,7 @@ class HttpTestServer(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    the_server = HTTPServer(("localhost", 13013), HttpTestServer)
+    the_server = HTTPServer(("localhost", config.port), HttpTestServer)
     try:
         the_server.serve_forever()
     except KeyboardInterrupt:
