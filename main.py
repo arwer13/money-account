@@ -155,6 +155,7 @@ class HttpTestServer(BaseHTTPRequestHandler):
             expenses_array[0].append("{}-{}".format(begin, end))
             expenses_array[1].append("{:.0f}".format(expenses_weekly[period]))
         fields["selected_expenses_weekly"] = html_stuff.make_table(expenses_array)
+        fields["weekly_categories"] = ", ".join([x[0] for x in config.weekly_categories])
 
         expenses_by_categories = bk.expenses_by_top_categories()
         array = [[], []]

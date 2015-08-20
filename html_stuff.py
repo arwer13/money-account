@@ -4,7 +4,7 @@ html_template = """<html>
 <body>
 <h1>Total: {total_value:.0f} </h1> </br>
 
-<h1>Selected expenses weekly*</h1>
+<h1>Selected expenses weekly ({weekly_categories})</h1>
 {selected_expenses_weekly}
 
 <h1>Expenses monthly by categories</h1>
