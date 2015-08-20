@@ -187,7 +187,7 @@ class HttpTestServer(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    the_server = HTTPServer(("localhost", config.port), HttpTestServer)
+    the_server = HTTPServer(("", config.port), HttpTestServer)
     try:
         the_server.serve_forever()
     except KeyboardInterrupt:
