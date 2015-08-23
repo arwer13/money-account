@@ -128,6 +128,9 @@ class Bookkeeper:
             result.add(et.cats)
         return result
 
+    def get_last_lines(self, num_lines=7):
+        return "\n".join(map(str, self.entries[-num_lines:]))
+
 
 model_template = {
     "title": None,
@@ -173,6 +176,8 @@ def make_model(bk):
             row.append("{:.0f}".format(mv.get(c, 0)))
         array.append(row)
     result["monthly_by_categories"] = html_stuff.make_table(array)
+    result["last_lines"] = bk.get_last_lines()
+
     return result
 
 
@@ -193,8 +198,8 @@ class HttpTestServer(BaseHTTPRequestHandler):
     def do_GET(self):
         importlib.reload(config)
         bk = self.load_data()
-        fields = make_model(bk)
-        html = html_stuff.html_template.format(**fields)
+        model = make_model(bk)
+        html = html_stuff.represent_html(model)
 
         self.send_response(200)
         self.send_header("Content-type", "text/html")

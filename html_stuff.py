@@ -5,7 +5,12 @@ html_template = """<html>
 <title>{title}</title>
 </head>
 <body>
-<h1>Total: {total_value:.0f} </h1> </br>
+<h1>Total: {total_value:.0f} </h1>
+
+<h1>Last entries:</h1>
+<p>
+{last_lines}
+</p>
 
 <h1>Selected expenses weekly ({weekly_categories})</h1>
 {selected_expenses_weekly}
@@ -17,6 +22,14 @@ html_template = """<html>
 {expenses_by_categories}
 </body>
 </html>"""
+
+
+def represent_html(model):
+    # copy model?
+    model["last_lines"] = model["last_lines"].replace("\n", "</br>")
+    result = html_template.format(**model)
+    return result
+
 
 def make_table(tt):
     result = ""
