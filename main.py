@@ -25,12 +25,13 @@ class Entry:
         self.tags = None
         self.time = None
         self.value = None
+        self.note = None
         if s is None:
             return
         if s.strip() == "" or s.strip()[0] == '#':
             return
-        r = re.compile(r' *(\d\d\d\d\.\d\d\.\d\d) *(.*) +([\(\)\d\+-\.,]+) *')
-        date_gr, desc_gr, value_gr = r.match(s).groups()
+        r = re.compile(r' *(\d\d\d\d\.\d\d\.\d\d) *(.*?) +([\(\)\d\+-\.,]+)\w*(.*)')
+        date_gr, desc_gr, value_gr, note_gr = r.match(s).groups()
 
         if ';' not in desc_gr: desc_gr += ';'
         value_gr = value_gr.replace(',', '.')
@@ -40,16 +41,18 @@ class Entry:
         self.tags = set(filter(None, map(str.strip, tags.split(','))))
         self.time = datetime.date(*map(int, date_gr.split('.')))
         self.value = eval(value_gr) if value_gr[0] == '+' else -eval(value_gr)
+        self.note = note_gr.strip()
 
     def __str__(self):
-        return "{} {};{} {:.1f}".format(self.time, ','.join(self.cats), ','.join(self.tags), -self.value)
+        return "{} {};{} {:.1f} {}".format(self.time, ','.join(self.cats), ','.join(self.tags), -self.value, self.note)
 
     def __repr__(self):
         return self.__str__()
 
     def __eq__(self, other):
         # return self.__str__() == other.__str__()
-        return self.cats == other.cats and self.time == other.time and self.tags == other.tags and self.value == other.value
+        return self.cats == other.cats and self.time == other.time and self.tags == other.tags \
+               and self.value == other.value and self.note == other.note
 
     def __ge__(self, other):
         return self.time >= other.time
@@ -126,6 +129,53 @@ class Bookkeeper:
         return result
 
 
+model_template = {
+    "title": None,
+    "total_value": None,
+    "current_date": None,
+    "monthly_by_categories": None
+}
+
+
+
+def make_model(bk):
+    result = dict()
+    result["title"] = "Welcome!"
+    result["total_value"] = bk.get_total_value()
+
+    expenses_weekly = bk.every_calendar_weak()
+    expenses_array = [[], []]
+    for i, period in enumerate(sorted(expenses_weekly.keys())):
+        begin = period[0].strftime("%d.%m")
+        end = (period[1] - datetime.timedelta(days=1)).strftime("%d.%m")
+        expenses_array[0].append("{}-{}".format(begin, end))
+        expenses_array[1].append("{:.0f}".format(expenses_weekly[period]))
+    result["selected_expenses_weekly"] = html_stuff.make_table(expenses_array)
+    result["weekly_categories"] = ", ".join([x[0] for x in config.weekly_categories])
+
+    expenses_by_categories = bk.expenses_by_top_categories()
+    array = [[], []]
+    for cat, value in sorted(expenses_by_categories.items(), key=lambda x: x[1], reverse=True):
+        array[0].append(", ".join(cat))
+        array[1].append("{:.0f}".format(value))
+    result["expenses_by_categories"] = html_stuff.make_table(array)
+
+    monthly_by_categories = bk.monthly_by_categories()
+    all_categories = list({c for mv in monthly_by_categories.values() for c in mv})
+    all_categories = sorted(all_categories,
+                            key=lambda cc: sum([mm[cc] for mm in monthly_by_categories.values()]), reverse=True)
+    array = [["Month", "All"] + [c[0] for c in all_categories]]
+    for m in sorted(monthly_by_categories.keys()):
+        mv = monthly_by_categories[m]
+        row = ["{} {} ({}-{})".format(m[0].strftime("%Y"), m[0].strftime("%B"), m[0].strftime("%d.%m"), (m[1]-relativedelta(days=1)).strftime("%d.%m")),
+               "{:.0f}".format(sum(mv.values()))]
+        for c in all_categories:
+            row.append("{:.0f}".format(mv.get(c, 0)))
+        array.append(row)
+    result["monthly_by_categories"] = html_stuff.make_table(array)
+    return result
+
+
 class HttpTestServer(BaseHTTPRequestHandler):
 
     def load_data(self):
@@ -143,41 +193,7 @@ class HttpTestServer(BaseHTTPRequestHandler):
     def do_GET(self):
         importlib.reload(config)
         bk = self.load_data()
-        fields = dict()
-        fields["title"] = "Welcome!"
-        fields["total_value"] = bk.get_total_value()
-
-        expenses_weekly = bk.every_calendar_weak()
-        expenses_array = [[], []]
-        for i, period in enumerate(sorted(expenses_weekly.keys())):
-            begin = period[0].strftime("%d.%m")
-            end = (period[1] - datetime.timedelta(days=1)).strftime("%d.%m")
-            expenses_array[0].append("{}-{}".format(begin, end))
-            expenses_array[1].append("{:.0f}".format(expenses_weekly[period]))
-        fields["selected_expenses_weekly"] = html_stuff.make_table(expenses_array)
-        fields["weekly_categories"] = ", ".join([x[0] for x in config.weekly_categories])
-
-        expenses_by_categories = bk.expenses_by_top_categories()
-        array = [[], []]
-        for cat, value in sorted(expenses_by_categories.items(), key=lambda x: x[1], reverse=True):
-            array[0].append(", ".join(cat))
-            array[1].append("{:.0f}".format(value))
-        fields["expenses_by_categories"] = html_stuff.make_table(array)
-
-        monthly_by_categories = bk.monthly_by_categories()
-        all_categories = list({c for mv in monthly_by_categories.values() for c in mv})
-        all_categories = sorted(all_categories,
-                                key=lambda cc: sum([mm[cc] for mm in monthly_by_categories.values()]), reverse=True)
-        array = [["Month", "All"] + [c[0] for c in all_categories]]
-        for m in sorted(monthly_by_categories.keys()):
-            mv = monthly_by_categories[m]
-            row = ["{} {} ({}-{})".format(m[0].strftime("%Y"), m[0].strftime("%B"), m[0].strftime("%d.%m"), (m[1]-relativedelta(days=1)).strftime("%d.%m")),
-                   "{:.0f}".format(sum(mv.values()))]
-            for c in all_categories:
-                row.append("{:.0f}".format(mv.get(c, 0)))
-            array.append(row)
-        fields["monthly_by_categories"] = html_stuff.make_table(array)
-
+        fields = make_model(bk)
         html = html_stuff.html_template.format(**fields)
 
         self.send_response(200)

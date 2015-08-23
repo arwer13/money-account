@@ -1,6 +1,9 @@
 
 html_template = """<html>
-<head><title>{title}</title></head>
+<head>
+<meta charset="utf-8">
+<title>{title}</title>
+</head>
 <body>
 <h1>Total: {total_value:.0f} </h1> </br>
 
