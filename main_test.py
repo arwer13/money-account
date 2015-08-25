@@ -40,6 +40,33 @@ class TestEntry(unittest.TestCase):
         self.assertEqual(Entry("     "), Entry())
 
 
+    def test_model(self):
+        lines = """
+    2015.07.25 food, fish 200
+    2015.07.11 cats, fish 100
+    2015.07.26 salary; some_place +1000
+    2015.08.03 salary; some_place +8000
+
+    2015.08.25 food, fish 200
+    2015.08.11 cats, fish 100
+    2015.08.20 salary; some_place +10000
+    2015.09.05 salary; some_place +15000
+    2015.09.10 food, meat 500
+    2015.08.30 food 100
+    2015.09.05 entertainment 300
+"""
+        bk = Bookkeeper()
+        for a in lines.splitlines(keepends=False):
+            bk.process(Entry(a))
+        model = make_model(bk)
+        em = dict()
+        em["total_value"] = -200-100+1000+8000-200-100+10000+15000-500-100-300
+        # em["selected_expenses_weekly"] =
+        for k in set(em.keys()).intersection(set(model.keys())):
+            self.assertEqual(model[k], em[k])
+
+
+
 class TestHtmlStuff(unittest.TestCase):
 
     def test_make_html_table(self):
