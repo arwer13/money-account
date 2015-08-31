@@ -16,7 +16,6 @@ import html_stuff
 import config
 
 
-
 @total_ordering
 class Entry:
 
@@ -98,7 +97,6 @@ class Bookkeeper:
 
         return result
 
-
     def process(self, e):
         if e != Entry():
             bisect.insort_left(self.entries, e)
@@ -108,18 +106,15 @@ class Bookkeeper:
             entries = self.entries
         return sum([e.value for e in entries])
 
-    def expenses_by_period(self, begin, end):
-        return self.filter(period=(begin, end), sign="-")
-
-    def filter_by_cats(self, cats):
-        return self.filter(cats=cats)
-
     def every_calendar_weak(self):
         result = dict()
         start_date = self.closest_monday(min(e.time for e in self.entries))
         for dt in rrule.rrule(rrule.WEEKLY, dtstart=start_date, until=datetime.date.today()):
             period = dt.date(), dt.date() + datetime.timedelta(days=6)
-            result[period] = -sum(map(lambda x: x.value, self.filter(period=period, sign="-", cats=config.weekly_categories)))
+            week_expenses = self.filter(period=period, sign="-", cats=config.weekly_categories)
+            notes = [str(x) for x in week_expenses]
+            value = -sum(map(lambda x: x.value, week_expenses))
+            result[period] = {"value": value, "note": notes}
             # begin, end = period
             # es = list(filter(lambda x: begin <= x.time < end and x.value < 0, self.filter_by_cats(config.weekly_categories)))
             # result[(begin, end)] = -sum(a.value for a in es)
@@ -152,9 +147,6 @@ class Bookkeeper:
             result.add(et.cats)
         return result
 
-    def get_last_lines(self, num_lines=7):
-        return "\n".join(map(str, self.entries[-num_lines:]))
-
 
 model_template = {
     "title": None,
@@ -162,7 +154,6 @@ model_template = {
     "current_date": None,
     "monthly_by_categories": None
 }
-
 
 
 def make_model(bk):
@@ -173,20 +164,12 @@ def make_model(bk):
     expenses_array = [[], []]
     for i, period in enumerate(sorted(expenses_weekly.keys())):
         begin = period[0].strftime("%d.%m")
-        end = (period[1] - datetime.timedelta(days=1)).strftime("%d.%m")
-        expenses_array[0].append({"value": "{}-{}".format(begin, end),
-                                 "note": "test_note"}
-        )
-        expenses_array[1].append("{:.0f}".format(expenses_weekly[period]))
-    result["selected_expenses_weekly"] = html_stuff.make_table(expenses_array)
+        end = period[1].strftime("%d.%m")
+        # end = (period[1] - datetime.timedelta(days=1)).strftime("%d.%m")
+        expenses_array[0].append("{}-{}".format(begin, end))
+        expenses_array[1].append({"value": expenses_weekly[period]["value"], "note": expenses_weekly[period]["note"]})
+    result["selected_expenses_weekly"] = expenses_array
     result["weekly_categories"] = ", ".join([x[0] for x in config.weekly_categories])
-
-    expenses_by_categories = bk.expenses_by_top_categories()
-    array = [[], []]
-    for cat, value in sorted(expenses_by_categories.items(), key=lambda x: x[1], reverse=True):
-        array[0].append(", ".join(cat))
-        array[1].append("{:.0f}".format(value))
-    result["expenses_by_categories"] = html_stuff.make_table(array)
 
     monthly_by_categories = bk.monthly_by_categories()
     all_categories = list({c for mv in monthly_by_categories.values() for c in mv})
@@ -199,12 +182,11 @@ def make_model(bk):
         total_spent = sum(mv.values())
         income = sum([x.value for x in bk.filter(period=m, sign="+")])
         balance = income - total_spent
-        row = [month, "{:.0f}".format(income), "{:.0f}".format(total_spent), "{:.0f}".format(balance)]
+        row = [month, income, total_spent, balance]
         for c in all_categories:
-            row.append("{:.0f}".format(mv.get(c, 0)))
+            row.append(mv.get(c, 0))
         array.append(row)
-    result["monthly_by_categories"] = html_stuff.make_table(array)
-    # result["last_lines"] = bk.get_last_lines()
+    result["monthly_by_categories"] = array
 
     return result
 
@@ -213,7 +195,7 @@ class HttpTestServer(BaseHTTPRequestHandler):
 
     def load_data(self):
         money_txt_path = os.environ.get("MONEY_TXT_PATH", config.money_txt_path)
-        with open(money_txt_path, "r") as ff:
+        with open(money_txt_path, "r", encoding="utf8") as ff:
             text = ff.read()
         start_index = text.find("\n\n\n")
         if start_index != -1: text = text[start_index:]
