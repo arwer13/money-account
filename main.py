@@ -43,7 +43,8 @@ class Entry:
         self.note = note_gr.strip()
 
     def __str__(self):
-        return "{} {};{} {:.1f}   {}".format(self.time, ','.join(self.cats), ','.join(self.tags), -self.value, self.note)
+        value_str = "{:.1f}".format(-self.value) if self.value < 0 else "+{:.0f}".format(self.value)
+        return "{} {};{} {} {}".format(self.time, ','.join(self.cats), ','.join(self.tags), value_str, self.note)
 
     def __repr__(self):
         return self.__str__()
@@ -61,6 +62,7 @@ class Bookkeeper:
 
     def __init__(self):
         self.entries = []
+        self.milestones = []
 
     def closest_monday(self, date):
         while date.weekday() != 0:
@@ -97,14 +99,24 @@ class Bookkeeper:
 
         return result
 
-    def process(self, e):
-        if e != Entry():
-            bisect.insort_left(self.entries, e)
+    def process(self, line):
+        if line == "":
+            return
+        r = re.compile(r'\s*(\d\d\d\d\.\d\d\.\d\d)\s+!(.*?) +([\(\)\d\+-\.\*,]+)\s*')
+        command_match = r.match(line)
+        if command_match is not None:
+            date_str, command, value_str = command_match.groups()
+            date = datetime.date(*map(int, date_str.split('.')))
+            value = eval(value_str)
+            bisect.insort_left(self.milestones, (date, command, value))
+        elif line != "":
+            e = Entry(line)
+            if e != Entry():
+                bisect.insort_left(self.entries, e)
 
-    def get_total_value(self, entries=None):
-        if entries is None:
-            entries = self.entries
-        return sum([e.value for e in entries])
+    def get_total_value(self):
+        milestone = self.milestones[-1]
+        return milestone[2] + sum([e.value for e in self.filter(period=(milestone[0], datetime.date.today()))])
 
     def every_calendar_weak(self):
         result = dict()
@@ -123,9 +135,11 @@ class Bookkeeper:
     def expenses_by_top_categories(self, entries=None):
         if entries is None:
             entries = self.entries
-        result = defaultdict(float)
+        result = defaultdict(lambda : {"value": 0.0, "note": []})
         for x in filter(lambda x: x.value < 0, entries):
-            result[x.cats[:1]] += -x.value
+            cat = x.cats[:1]
+            result[cat]["value"] += -x.value
+            result[cat]["note"].append(str(x))
         return result
 
     def monthly_by_categories(self):
@@ -174,14 +188,17 @@ def make_model(bk):
     monthly_by_categories = bk.monthly_by_categories()
     all_categories = list({c for mv in monthly_by_categories.values() for c in mv})
     all_categories = sorted(all_categories,
-                            key=lambda cc: sum([mm[cc] for mm in monthly_by_categories.values()]), reverse=True)
+                            key=lambda cc: sum([mm[cc]["value"] for mm in monthly_by_categories.values()]), reverse=True)
     array = [["Month", "Income", "Total spent", "Balance"] + [c[0] for c in all_categories]]
     for m in sorted(monthly_by_categories.keys()):
         mv = monthly_by_categories[m]
         month = "{} {} ({}-{})".format(m[0].strftime("%Y"), m[0].strftime("%B"), m[0].strftime("%d.%m"), m[1].strftime("%d.%m"))
-        total_spent = sum(mv.values())
-        income = sum([x.value for x in bk.filter(period=m, sign="+")])
-        balance = income - total_spent
+        total_spent = sum([x["value"] for x in mv.values()])
+        income = {"value": 0, "note": []}
+        for x in bk.filter(period=m, sign="+"):
+            income["value"] += x.value
+            income["note"].append(str(x))
+        balance = income["value"] - total_spent
         row = [month, income, total_spent, balance]
         for c in all_categories:
             row.append(mv.get(c, 0))
@@ -201,8 +218,7 @@ class HttpTestServer(BaseHTTPRequestHandler):
         if start_index != -1: text = text[start_index:]
         bk = Bookkeeper()
         for line in text.split("\n"):
-            e = Entry(line)
-            bk.process(e)
+            bk.process(line)
         return bk
 
     def do_GET(self):
