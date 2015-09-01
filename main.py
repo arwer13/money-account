@@ -25,22 +25,31 @@ class Entry:
         self.time = None
         self.value = None
         self.note = None
+        self.cmd = None
         if s is None:
             return
         if s.strip() == "" or s.strip()[0] == '#':
             return
-        r = re.compile(r' *(\d\d\d\d\.\d\d\.\d\d) *(.*?) +([\(\)\d\+-\.,]+)\w*(.*)')
-        date_gr, desc_gr, value_gr, note_gr = r.match(s).groups()
+        cmd_re = re.compile(r'\s*(\d\d\d\d\.\d\d\.\d\d)\s+!(.*?) +([\(\)\d\+-\.\*,]+)\s*')
+        entry_re = re.compile(r' *(\d\d\d\d\.\d\d\.\d\d) *(.*?) +([\(\)\d\+-\.,]+)\w*(.*)')
 
-        if ';' not in desc_gr: desc_gr += ';'
-        value_gr = value_gr.replace(',', '.')
+        cmd_match = cmd_re.match(s)
+        if cmd_match is not None:
+            date_str, self.cmd, value_str = cmd_match.groups()
+            self.time = datetime.date(*map(int, date_str.split('.')))
+            self.value = eval(value_str)
+        else:
+            date_gr, desc_gr, value_gr, note_gr = entry_re.match(s).groups()
 
-        cats, tags = map(str.strip, desc_gr.split(';'))
-        self.cats = tuple(filter(None, map(str.strip, cats.split(','))))
-        self.tags = set(filter(None, map(str.strip, tags.split(','))))
-        self.time = datetime.date(*map(int, date_gr.split('.')))
-        self.value = eval(value_gr) if value_gr[0] == '+' else -eval(value_gr)
-        self.note = note_gr.strip()
+            if ';' not in desc_gr: desc_gr += ';'
+            value_gr = value_gr.replace(',', '.')
+
+            cats, tags = map(str.strip, desc_gr.split(';'))
+            self.cats = tuple(filter(None, map(str.strip, cats.split(','))))
+            self.tags = set(filter(None, map(str.strip, tags.split(','))))
+            self.time = datetime.date(*map(int, date_gr.split('.')))
+            self.value = eval(value_gr) if value_gr[0] == '+' else -eval(value_gr)
+            self.note = note_gr.strip()
 
     def __str__(self):
         value_str = "{:.1f}".format(-self.value) if self.value < 0 else "+{:.0f}".format(self.value)
@@ -74,7 +83,7 @@ class Bookkeeper:
             date -= datetime.timedelta(days=1)
         return date
 
-    def filter(self, period=None, cats=None, tags=None, sign=None):
+    def filter(self, period=None, cats=None, tags=None, sign=None, cmds=[None]):
         result = self.entries
 
         if sign == "+":
@@ -97,22 +106,28 @@ class Bookkeeper:
         if tags is not None:
             result = filter(lambda x: x.tags.intersection(tags) != set(), result)
 
+        result = filter(lambda x: x.cmd in cmds, result)
+
         return result
 
     def process(self, line):
         if line == "":
             return
-        r = re.compile(r'\s*(\d\d\d\d\.\d\d\.\d\d)\s+!(.*?) +([\(\)\d\+-\.\*,]+)\s*')
-        command_match = r.match(line)
-        if command_match is not None:
-            date_str, command, value_str = command_match.groups()
-            date = datetime.date(*map(int, date_str.split('.')))
-            value = eval(value_str)
-            bisect.insort_left(self.milestones, (date, command, value))
-        elif line != "":
-            e = Entry(line)
-            if e != Entry():
-                bisect.insort_left(self.entries, e)
+        e = Entry(line)
+
+        bisect.insort_right(self.entries, e)
+
+        # r = re.compile(r'\s*(\d\d\d\d\.\d\d\.\d\d)\s+!(.*?) +([\(\)\d\+-\.\*,]+)\s*')
+        # command_match = r.match(line)
+        # if command_match is not None:
+        #     date_str, command, value_str = command_match.groups()
+        #     date = datetime.date(*map(int, date_str.split('.')))
+        #     value = eval(value_str)
+        #     bisect.insort_right(self.milestones, (date, command, value))
+        # elif line != "":
+        #     e = Entry(line)
+        #     if e != Entry():
+        #         bisect.insort_right(self.entries, e)
 
     def get_total_value(self):
         milestone = self.milestones[-1]
