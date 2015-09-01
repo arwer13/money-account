@@ -13,6 +13,9 @@ html_template = """<html>
 <h1>Expenses monthly by categories</h1>
 {monthly_by_categories}
 
+<h1>Errors</h1>
+{errors}
+
 </body>
 </html>"""
 
@@ -21,6 +24,7 @@ def represent_html(model):
     # copy model?
     model["selected_expenses_weekly"] = make_table(model["selected_expenses_weekly"])
     model["monthly_by_categories"] = make_table(model["monthly_by_categories"])
+    model["errors"] = make_table(model["errors"])
     result = html_template.format(**model)
     return result
 

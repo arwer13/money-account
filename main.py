@@ -52,26 +52,27 @@ class Entry:
             self.note = note_gr.strip()
 
     def __str__(self):
-        value_str = "{:.1f}".format(-self.value) if self.value < 0 else "+{:.0f}".format(self.value)
-        return "{} {};{} {} {}".format(self.time, ','.join(self.cats), ','.join(self.tags), value_str, self.note)
+        if self.cmd is None:
+            value_str = "{:.1f}".format(-self.value) if self.value < 0 else "+{:.0f}".format(self.value)
+            return "{} {};{} {} {}".format(self.time, ','.join(self.cats), ','.join(self.tags), value_str, self.note)
+        else:
+            return "{} !{} {:.1f}".format(self.time, self.cmd, self.value)
 
     def __repr__(self):
         return self.__str__()
 
     def __eq__(self, other):
-        # return self.__str__() == other.__str__()
         return self.cats == other.cats and self.time == other.time and self.tags == other.tags \
                and self.value == other.value and self.note == other.note
 
-    def __ge__(self, other):
-        return self.time >= other.time
+    def __gt__(self, other):
+        return self.time > other.time
 
 
 class Bookkeeper:
 
     def __init__(self):
         self.entries = []
-        self.milestones = []
 
     def closest_monday(self, date):
         while date.weekday() != 0:
@@ -83,8 +84,9 @@ class Bookkeeper:
             date -= datetime.timedelta(days=1)
         return date
 
-    def filter(self, period=None, cats=None, tags=None, sign=None, cmds=[None]):
+    def filter(self, period=None, cats=None, tags=None, sign=None, cmds=(None,)):
         result = self.entries
+        result = list(filter(lambda x: x.cmd in cmds, result))
 
         if sign == "+":
             result = filter(lambda a: a.value > 0, result)
@@ -92,7 +94,10 @@ class Bookkeeper:
             result = filter(lambda a: a.value < 0, result)
 
         if period is not None:
-            result = filter(lambda x: period[0] <= x.time <= period[1], result)
+            pr = [None, None]
+            pr[0] = period[0] if period[0] is not None else self.entries[0].time
+            pr[1] = period[1] if period[1] is not None else datetime.date.today()
+            result = filter(lambda x: pr[0] <= x.time <= pr[1], result)
 
         if cats is not None:
             filtered_by_cats = list()
@@ -106,32 +111,28 @@ class Bookkeeper:
         if tags is not None:
             result = filter(lambda x: x.tags.intersection(tags) != set(), result)
 
-        result = filter(lambda x: x.cmd in cmds, result)
-
         return result
 
     def process(self, line):
         if line == "":
             return
         e = Entry(line)
-
-        bisect.insort_right(self.entries, e)
-
-        # r = re.compile(r'\s*(\d\d\d\d\.\d\d\.\d\d)\s+!(.*?) +([\(\)\d\+-\.\*,]+)\s*')
-        # command_match = r.match(line)
-        # if command_match is not None:
-        #     date_str, command, value_str = command_match.groups()
-        #     date = datetime.date(*map(int, date_str.split('.')))
-        #     value = eval(value_str)
-        #     bisect.insort_right(self.milestones, (date, command, value))
-        # elif line != "":
-        #     e = Entry(line)
-        #     if e != Entry():
-        #         bisect.insort_right(self.entries, e)
+        if e != Entry():
+            if len(self.entries) > 0 and self.entries[-1].time >= e.time:
+                self.entries.append(e)
+            else:
+                bisect.insort_right(self.entries, e)
 
     def get_total_value(self):
-        milestone = self.milestones[-1]
-        return milestone[2] + sum([e.value for e in self.filter(period=(milestone[0], datetime.date.today()))])
+        # milestone = self.milestones[-1]
+        # return milestone[2] + sum([e.value for e in self.filter(period=(milestone[0], datetime.date.today()))])
+        result = 0.0
+        for e in self.entries:
+            if e.cmd == "milestone":
+                result = e.value
+            else:
+                result += e.value
+        return result
 
     def every_calendar_weak(self):
         result = dict()
@@ -139,12 +140,10 @@ class Bookkeeper:
         for dt in rrule.rrule(rrule.WEEKLY, dtstart=start_date, until=datetime.date.today()):
             period = dt.date(), dt.date() + datetime.timedelta(days=6)
             week_expenses = self.filter(period=period, sign="-", cats=config.weekly_categories)
+            week_expenses = list(week_expenses)
             notes = [str(x) for x in week_expenses]
             value = -sum(map(lambda x: x.value, week_expenses))
             result[period] = {"value": value, "note": notes}
-            # begin, end = period
-            # es = list(filter(lambda x: begin <= x.time < end and x.value < 0, self.filter_by_cats(config.weekly_categories)))
-            # result[(begin, end)] = -sum(a.value for a in es)
         return result
 
     def expenses_by_top_categories(self, entries=None):
@@ -163,10 +162,6 @@ class Bookkeeper:
         for dt in rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=datetime.date.today()):
             period = dt.date(), dt.date() + relativedelta(months=1) - relativedelta(days=1)
             result[period] = self.filter(period=period)
-            # result.update({period: x for x in self.filter(period=period)})
-            # es = list(filter(lambda x: begin <= x.time < end, self.entries))
-            # for entry in es:
-            #     result[(begin, end)].append(entry)
         result = {k: self.expenses_by_top_categories(v) for k, v in result.items()}
         return result
 
@@ -196,7 +191,7 @@ def make_model(bk):
         end = period[1].strftime("%d.%m")
         # end = (period[1] - datetime.timedelta(days=1)).strftime("%d.%m")
         expenses_array[0].append("{}-{}".format(begin, end))
-        expenses_array[1].append({"value": expenses_weekly[period]["value"], "note": expenses_weekly[period]["note"]})
+        expenses_array[1].append(expenses_weekly[period])
     result["selected_expenses_weekly"] = expenses_array
     result["weekly_categories"] = ", ".join([x[0] for x in config.weekly_categories])
 
@@ -219,6 +214,25 @@ def make_model(bk):
             row.append(mv.get(c, 0))
         array.append(row)
     result["monthly_by_categories"] = array
+
+    errors_arr = [[], []]
+    current_value = 0.0
+    left_date = bk.entries[0].time
+    for e in bk.filter(cmds=(None, "milestone")):
+        if e.cmd == "milestone":
+            period = "{}-{}".format(left_date.strftime("%d.%m"), e.time.strftime("%d.%m"))
+            errors_arr[0].append(period)
+            cell = {
+                "value":  e.value - current_value,
+                "note": ["Accounted: {:.0f}".format(current_value), "Actual: {:.0f}".format(e.value)]
+            }
+            errors_arr[1].append(cell)
+            current_value = e.value
+            left_date = e.time
+        else:
+            current_value += e.value
+
+    result["errors"] = errors_arr
 
     return result
 
@@ -246,7 +260,6 @@ class HttpTestServer(BaseHTTPRequestHandler):
         self.send_header("Content-type", "text/html")
         self.end_headers()
         self.wfile.write(html.encode('utf-8'))
-
 
 
 if __name__ == "__main__":
