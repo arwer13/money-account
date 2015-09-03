@@ -28,7 +28,9 @@ class Entry:
         self.cmd = None
         if s is None:
             return
-        if s.strip() == "" or s.strip()[0] == '#':
+        if s.strip() == "":
+            return
+        elif s.strip()[0] == '#':
             return
         cmd_re = re.compile(r'\s*(\d\d\d\d\.\d\d\.\d\d)\s+!(.*?) +([\(\)\d\+-\.\*,]+)\s*')
         entry_re = re.compile(r' *(\d\d\d\d\.\d\d\.\d\d) *(.*?) +([\(\)\d\+-\.,]+)\w*(.*)')
@@ -39,7 +41,13 @@ class Entry:
             self.time = datetime.date(*map(int, date_str.split('.')))
             self.value = eval(value_str)
         else:
-            date_gr, desc_gr, value_gr, note_gr = entry_re.match(s).groups()
+            try:
+                date_gr, desc_gr, value_gr, note_gr = entry_re.match(s).groups()
+            except AttributeError as e:
+                msg = str(e)
+                print("Error line: {} ({})".format(s, e))
+                return
+
 
             if ';' not in desc_gr: desc_gr += ';'
             value_gr = value_gr.replace(',', '.')
