@@ -11,6 +11,9 @@ from pprint import pprint
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
 import importlib
+from io import BytesIO
+import numpy as np
+import matplotlib.pyplot as plt
 
 import html_stuff
 import config
@@ -47,7 +50,6 @@ class Entry:
                 msg = str(e)
                 print("Error line: {} ({})".format(s, e))
                 return
-
 
             if ';' not in desc_gr: desc_gr += ';'
             value_gr = value_gr.replace(',', '.')
@@ -259,7 +261,6 @@ class HttpTestServer(BaseHTTPRequestHandler):
         return bk
 
     # routing
-    import re
     route_root = "^[/]{0,1}$"
     route_chart = "^/chart[/]{0,1}$"
 
@@ -280,24 +281,28 @@ class HttpTestServer(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(html.encode('utf-8'))
 
-    def do_GET_chart(self, model):
-        label = model["selected_expenses_weekly"][0]
-        data = [a['value'] for a in model["selected_expenses_weekly"][1]]
-        # generate temp svg
-        import numpy as np
-        ind = np.arange(len(data))
-        import matplotlib.pyplot as plt
-        plt.figure(figsize=(7,3))
-        plt.bar(ind, data, facecolor='green', alpha=0.5, width=0.9)
-        plt.xticks(ind + ind[1]/3, label)
+    def expenses_by_periods_plot(self, labels, values):
+        ind = np.arange(len(values))
+        plt.figure(figsize=(7,4))
+        plt.bar(ind, values, facecolor='green', alpha=0.5, width=0.9)
+        _, lbs = plt.xticks(ind + ind[1]/3, labels)
+        plt.setp(lbs, rotation=70)
+        plt.rc('font', size=9)
+        plt.tight_layout()
+        return plt.gcf()
 
-        from io import BytesIO
+    def do_GET_chart(self, model):
+        pp = self.expenses_by_periods_plot(
+            model["selected_expenses_weekly"][0],
+            [a['value'] for a in model["selected_expenses_weekly"][1]]
+        )
+
         figdata = BytesIO()
-        format = "jpg"
-        plt.savefig(figdata, format=format)
+        format = "png"
+        pp.savefig(figdata, format=format)
 
         self.send_response(200)
-        self.send_header("Content-type", "image/jpg")
+        self.send_header("Content-type", "image/" + format)
         self.end_headers()
         self.wfile.write(figdata.getvalue())
 
