@@ -83,12 +83,12 @@ class Bookkeeper:
         self.entries = []
 
     def closest_monday(self, date):
-        while date.weekday() != 0:
-            date -= datetime.timedelta(days=1)
+        date -= datetime.timedelta(days=date.weekday())
         return date
 
+    # scary way to step back to known date
     def closest_month_beginning(self, date):
-        while date.day != 11:
+        while date.day != config.month_period_day:
             date -= datetime.timedelta(days=1)
         return date
 
@@ -258,16 +258,48 @@ class HttpTestServer(BaseHTTPRequestHandler):
             bk.process(line)
         return bk
 
+    # routing
+    import re
+    route_root = "^[/]{0,1}$"
+    route_chart = "^/chart[/]{0,1}$"
+
     def do_GET(self):
         importlib.reload(config)
         bk = self.load_data()
         model = make_model(bk)
+        if re.match(self.route_root, self.path):
+            self.do_GET_root(model)
+        elif re.match(self.route_chart, self.path):
+            self.do_GET_chart(model)
+
+    def do_GET_root(self, model):
         html = html_stuff.represent_html(model)
 
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
         self.wfile.write(html.encode('utf-8'))
+
+    def do_GET_chart(self, model):
+        label = model["selected_expenses_weekly"][0]
+        data = [a['value'] for a in model["selected_expenses_weekly"][1]]
+        # generate temp svg
+        import numpy as np
+        ind = np.arange(len(data))
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(7,3))
+        plt.bar(ind, data, facecolor='green', alpha=0.5, width=0.9)
+        plt.xticks(ind + ind[1]/3, label)
+
+        from io import BytesIO
+        figdata = BytesIO()
+        format = "jpg"
+        plt.savefig(figdata, format=format)
+
+        self.send_response(200)
+        self.send_header("Content-type", "image/jpg")
+        self.end_headers()
+        self.wfile.write(figdata.getvalue())
 
 
 if __name__ == "__main__":
