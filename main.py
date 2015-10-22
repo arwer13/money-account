@@ -36,7 +36,7 @@ class Entry:
         elif s.strip()[0] == '#':
             return
         cmd_re = re.compile(r'\s*(\d\d\d\d\.\d\d\.\d\d)\s+!(.*?) +([\(\)\d\+-\.\*,]+)\s*')
-        entry_re = re.compile(r' *(\d\d\d\d\.\d\d\.\d\d) *(.*?) +([\(\)\d\+-\.,]+)\w*(.*)')
+        entry_re = re.compile(r' *(\d\d\d\d\.\d\d\.\d\d) *(.*?) +([\(\)\d\+-\.,\*]+)\w*(.*)')
 
         cmd_match = cmd_re.match(s)
         if cmd_match is not None:
