@@ -20,6 +20,18 @@ html_template = """<html>
 </body>
 </html>"""
 
+html_error_template = """<html>
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<p>
+{}
+</p>
+</body>
+</html>"""
+
 
 def represent_html(model):
     # copy model?

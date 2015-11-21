@@ -22,12 +22,12 @@ import config
 @total_ordering
 class Entry:
 
-    def __init__(self, s=None):
-        self.cats = None
-        self.tags = None
-        self.time = None
-        self.value = None
-        self.note = None
+    def __init__(self, s=None, date=None):
+        self.cats = []
+        self.tags = set()
+        self.day = None
+        self.value = 0
+        self.note = ""
         self.cmd = None
         if s is None:
             return
@@ -35,13 +35,14 @@ class Entry:
             return
         elif s.strip()[0] == '#':
             return
-        cmd_re = re.compile(r'\s*(\d\d\d\d\.\d\d\.\d\d)\s+!(.*?) +([\(\)\d\+-\.\*,]+)\s*')
-        entry_re = re.compile(r' *(\d\d\d\d\.\d\d\.\d\d) *(.*?) +([\(\)\d\+-\.,\*]+)\w*(.*)')
+        cmd_re = re.compile(r'\s*(\d\d\d\d\.\d\d\.\d\d)?\s+!(.*?) +([\(\)\d\+-\.\*,]+)\s*')
+        entry_re = re.compile(r' *(\d\d\d\d\.\d\d\.\d\d)? *(.*?) +([\(\)\d\+-\.,\*]+)\w*(.*)')
 
         cmd_match = cmd_re.match(s)
         if cmd_match is not None:
+            print(cmd_match.groups())
             date_str, self.cmd, value_str = cmd_match.groups()
-            self.time = datetime.date(*map(int, date_str.split('.')))
+            self.day = datetime.date(*map(int, date_str.split('.')))
             self.value = eval(value_str)
         else:
             try:
@@ -57,32 +58,34 @@ class Entry:
             cats, tags = map(str.strip, desc_gr.split(';'))
             self.cats = tuple(filter(None, map(str.strip, cats.split(','))))
             self.tags = set(filter(None, map(str.strip, tags.split(','))))
-            self.time = datetime.date(*map(int, date_gr.split('.')))
+            self.day = date if date_gr is None else datetime.date(*map(int, date_gr.split('.')))
             self.value = eval(value_gr) if value_gr[0] == '+' else -eval(value_gr)
             self.note = note_gr.strip()
 
     def __str__(self):
         if self.cmd is None:
             value_str = "{:.1f}".format(-self.value) if self.value < 0 else "+{:.0f}".format(self.value)
-            return "{} {};{} {} {}".format(self.time, ','.join(self.cats), ','.join(self.tags), value_str, self.note)
+            return "{} {};{} {} {}".format(self.day, ','.join(self.cats), ','.join(self.tags), value_str,
+                                           '' if self.note is None else self.note)
         else:
-            return "{} !{} {:.1f}".format(self.time, self.cmd, self.value)
+            return "{} !{} {:.1f}".format(self.day, self.cmd, self.value)
 
     def __repr__(self):
-        return self.__str__()
+        return '\n'+str(self.__dict__)
 
     def __eq__(self, other):
-        return self.cats == other.cats and self.time == other.time and self.tags == other.tags \
+        return self.cats == other.cats and self.day == other.day and self.tags == other.tags \
                and self.value == other.value and self.note == other.note
 
     def __gt__(self, other):
-        return self.time > other.time
+        return self.day > other.day
 
 
 class Bookkeeper:
 
     def __init__(self):
         self.entries = []
+        self.last_day = None
 
     def closest_monday(self, date):
         date -= datetime.timedelta(days=date.weekday())
@@ -105,9 +108,9 @@ class Bookkeeper:
 
         if period is not None:
             pr = [None, None]
-            pr[0] = period[0] if period[0] is not None else self.entries[0].time
+            pr[0] = period[0] if period[0] is not None else self.entries[0].day
             pr[1] = period[1] if period[1] is not None else datetime.date.today()
-            result = filter(lambda x: pr[0] <= x.time <= pr[1], result)
+            result = filter(lambda x: pr[0] <= x.day <= pr[1], result)
 
         if cats is not None:
             filtered_by_cats = list()
@@ -123,12 +126,13 @@ class Bookkeeper:
 
         return result
 
-    def process(self, line):
+    def account(self, line):
         if line == "":
             return
-        e = Entry(line)
+        e = Entry(line, self.last_day)
+        self.last_day = e.day
         if e != Entry():
-            if len(self.entries) > 0 and self.entries[-1].time >= e.time:
+            if len(self.entries) > 0 and self.entries[-1].day >= e.day:
                 self.entries.append(e)
             else:
                 bisect.insort_right(self.entries, e)
@@ -146,7 +150,7 @@ class Bookkeeper:
 
     def every_calendar_weak(self):
         result = dict()
-        start_date = self.closest_monday(min(e.time for e in self.entries))
+        start_date = self.closest_monday(min(e.day for e in self.entries))
         for dt in rrule.rrule(rrule.WEEKLY, dtstart=start_date, until=datetime.date.today()):
             period = dt.date(), dt.date() + datetime.timedelta(days=6)
             week_expenses = self.filter(period=period, sign="-", cats=config.weekly_categories)
@@ -167,7 +171,7 @@ class Bookkeeper:
         return result
 
     def monthly_by_categories(self):
-        start_date = self.closest_month_beginning(min(e.time for e in self.entries))
+        start_date = self.closest_month_beginning(min(e.day for e in self.entries))
         result = defaultdict(list)
         for dt in rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=datetime.date.today()):
             period = dt.date(), dt.date() + relativedelta(months=1) - relativedelta(days=1)
@@ -227,10 +231,10 @@ def make_model(bk):
 
     errors_arr = [[], []]
     current_value = 0.0
-    left_date = bk.entries[0].time
+    left_date = bk.entries[0].day
     for e in bk.filter(cmds=(None, "milestone")):
         if e.cmd == "milestone":
-            period = "{}-{}".format(left_date.strftime("%d.%m"), e.time.strftime("%d.%m"))
+            period = "{}-{}".format(left_date.strftime("%d.%m"), e.day.strftime("%d.%m"))
             errors_arr[0].append(period)
             cell = {
                 "value":  e.value - current_value,
@@ -238,7 +242,7 @@ def make_model(bk):
             }
             errors_arr[1].append(cell)
             current_value = e.value
-            left_date = e.time
+            left_date = e.day
         else:
             current_value += e.value
 
@@ -246,6 +250,9 @@ def make_model(bk):
 
     return result
 
+
+class LineFormatError(Exception):
+    pass
 
 class HttpTestServer(BaseHTTPRequestHandler):
 
@@ -257,7 +264,11 @@ class HttpTestServer(BaseHTTPRequestHandler):
         if start_index != -1: text = text[start_index:]
         bk = Bookkeeper()
         for line in text.split("\n"):
-            bk.process(line)
+            try:
+                bk.account(line)
+            except Exception as e:
+                raise LineFormatError('Error\n{}\nprocessing line\n{}'.format(e, line))
+
         return bk
 
     # routing
@@ -266,12 +277,23 @@ class HttpTestServer(BaseHTTPRequestHandler):
 
     def do_GET(self):
         importlib.reload(config)
-        bk = self.load_data()
-        model = make_model(bk)
-        if re.match(self.route_root, self.path):
-            self.do_GET_root(model)
-        elif re.match(self.route_chart, self.path):
-            self.do_GET_chart(model)
+        try:
+            bk = self.load_data()
+            model = make_model(bk)
+            if re.match(self.route_root, self.path):
+                self.do_GET_root(model)
+            elif re.match(self.route_chart, self.path):
+               self.do_GET_chart(model)
+        except Exception as e:
+            self.do_GET_error(e)
+
+    def do_GET_error(self, e):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(html_stuff.html_error_template.format(e).encode('utf-8'))
+
+
 
     def do_GET_root(self, model):
         html = html_stuff.represent_html(model)
