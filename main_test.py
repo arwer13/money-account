@@ -7,21 +7,21 @@ import html_stuff
 class TestEntry(unittest.TestCase):
 
     def test_full_line(self):
-        line = "2015.07.09   food, milk; tinned food, tag2 67+77,3+51+41+57.0+36+40 имудон, 40т"
+        line = "2015.07.09   food, milk  67+77,3+51+41+57.0+36+40 #tinned-food имудон, #tag2 40т"
         a = Entry()
         a.cats = ("food", "milk")
         a.day = datetime.date(2015, 7, 9)
-        a.tags = set(["tinned food", "tag2"])
+        a.tags = ["tinned-food", "tag2"]
         a.value = -eval("67+77.3+51+41+57+36+40")
         a.note = "имудон, 40т"
         self.assertEqual(Entry(line), a)
 
     def test_positive_value(self):
-        line = "2015.07.09   food, milk; tinned food, tag2 +67+77+51+41+57+36+40"
+        line = "2015.07.09   food, milk +67+77+51+41+57+36+40 #tinned-food #tag2"
         a = Entry()
         a.cats = ("food", "milk")
         a.day = datetime.date(2015, 7, 9)
-        a.tags = {"tinned food", "tag2"}
+        a.tags = ["tinned-food", "tag2"]
         a.value = eval("67+77+51+41+57+36+40")
         self.assertEqual(Entry(line), a)
 
@@ -30,7 +30,7 @@ class TestEntry(unittest.TestCase):
         a = Entry()
         a.day = datetime.date(2015, 7, 8)
         a.cats = ("household",)
-        a.tags = set()
+        a.tags = []
         a.value = -34
         self.assertEqual(Entry(line), a)
 
@@ -45,7 +45,7 @@ class TestEntry(unittest.TestCase):
         expected.day = day
         expected.cats = ('food', 'cheese')
         expected.value = -22
-        self.assertEqual(actual, expected, '\n'+str(expected.__dict__)+'\n'+(str(actual.__dict__)))
+        self.assertEqual(actual, expected, '\n'+repr(expected.__dict__)+'\n'+(repr(actual.__dict__)))
 
     def test_model(self):
         self.skipTest('Not up-to-date, needs ref')
@@ -78,6 +78,7 @@ class TestEntry(unittest.TestCase):
 class TestHtmlStuff(unittest.TestCase):
 
     def test_make_html_table(self):
+        self.skipTest('obsolete')
         table = [
             ["cats", "dogs", "platypuses"],
             [1,2,3]

@@ -24,7 +24,7 @@ class Entry:
 
     def __init__(self, s=None, date=None):
         self.cats = []
-        self.tags = set()
+        self.tags = []
         self.day = None
         self.value = 0
         self.note = ""
@@ -52,21 +52,19 @@ class Entry:
                 print("Error line: {} ({})".format(s, e))
                 return
 
-            if ';' not in desc_gr: desc_gr += ';'
             value_gr = value_gr.replace(',', '.')
-
-            cats, tags = map(str.strip, desc_gr.split(';'))
-            self.cats = tuple(filter(None, map(str.strip, cats.split(','))))
-            self.tags = set(filter(None, map(str.strip, tags.split(','))))
+            note_words = list(filter(None, note_gr.split()))
             self.day = date if date_gr is None else datetime.date(*map(int, date_gr.split('.')))
+            self.cats = tuple(filter(None, map(str.strip, desc_gr.split(','))))
             self.value = eval(value_gr) if value_gr[0] == '+' else -eval(value_gr)
-            self.note = note_gr.strip()
+            self.note = ' '.join(filter(lambda x: x[0] != '#', note_words))
+            self.tags = list(map(lambda x: x[1:], filter(lambda x: x[0] == '#', note_words)))
 
     def __str__(self):
         if self.cmd is None:
             value_str = "{:.1f}".format(-self.value) if self.value < 0 else "+{:.0f}".format(self.value)
-            return "{} {};{} {} {}".format(self.day, ','.join(self.cats), ','.join(self.tags), value_str,
-                                           '' if self.note is None else self.note)
+            return "{} {} {} {} {}".format(self.day, ','.join(self.cats), value_str,
+                                           '' if self.note is None else self.note, ' '.join(map(lambda x: '#'+x, self.tags)))
         else:
             return "{} !{} {:.1f}".format(self.day, self.cmd, self.value)
 
