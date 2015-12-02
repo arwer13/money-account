@@ -1,23 +1,23 @@
-2015.09.15 food, bread 13
+2015.09.10 !milestone 340+10000+2000+3500+23
+2015.09.15 food,  bread 13
 2015.09.15 food, sugar 55
-2015.09.15 food, milky 49 milk
+2015.09.15 food, sugar 55
+2015.09.15 gift +2000 grandparents
+2015.09.15 salary +15000 #job1
 
-2015.09.25 food,sweets 54+36+10.3*5+14.3*5
-2015.09.25 food;not at home 37
+2015.09.25 food, sweets 54+36+10.3*5+14.3*5
+2015.09.25 food, not-at-home
 
-2015.09.26 food; not at home 35+50+59+79+45+54+79
-2015.09.26 misc +520 grandparents
-2015.09.26 renovation 43 paint
-2015.09.26 renovation 127.5 уголки
-2015.09.26 household items 170 bathroom basket
-2015.09.26 household items 21 soap dish
-2015.09.26 transport 17*4
-2015.09.26 transport 17
+2015.09.26 food, not at home 35+50+59+79+45+54+79
+misc +520 grandparents
+renovation 43 paint
+household 170 bathroom basket
+household   21   soap dish
+transport 17*4
+transport 17
 
-2015.09.27 food, bread 13
-2015.09.27 food, sugar 50
-2015.09.27 food, milky 49 milk
+2015.09.26 !milestone 8000+22+2440
 
-2015.10.01 food, bread 13
-2015.10.01 food, sugar 50
-2015.10.01 food, milky 49 milk
+2015.09.27 transport 1000 train #trip1 #tag2 #tag3
+food, not at home 200,3 ##trip1 fast food
+2015.09.31 food, milky 49 milk
