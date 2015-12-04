@@ -9,7 +9,6 @@ html_template = """<html>
 
 <h1>Selected expenses weekly ({weekly_categories})</h1>
 {selected_expenses_weekly}
-<img src="/chart">
 
 <h1>Expenses monthly by categories</h1>
 {monthly_by_categories}

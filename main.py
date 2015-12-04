@@ -12,8 +12,6 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
 import importlib
 from io import BytesIO
-import numpy as np
-import matplotlib.pyplot as plt
 
 import html_stuff
 import config
@@ -40,7 +38,6 @@ class Entry:
 
         cmd_match = cmd_re.match(s)
         if cmd_match is not None:
-            print(cmd_match.groups())
             date_str, self.cmd, value_str = cmd_match.groups()
             self.day = datetime.date(*map(int, date_str.split('.')))
             self.value = eval(value_str)
@@ -269,19 +266,12 @@ class HttpTestServer(BaseHTTPRequestHandler):
 
         return bk
 
-    # routing
-    route_root = "^[/]{0,1}$"
-    route_chart = "^/chart[/]{0,1}$"
-
     def do_GET(self):
         importlib.reload(config)
         try:
             bk = self.load_data()
             model = make_model(bk)
-            if re.match(self.route_root, self.path):
-                self.do_GET_root(model)
-            elif re.match(self.route_chart, self.path):
-               self.do_GET_chart(model)
+            self.do_GET_root(model)
         except Exception as e:
             self.do_GET_error(e)
 
@@ -290,8 +280,6 @@ class HttpTestServer(BaseHTTPRequestHandler):
         self.send_header("Content-type", "text/html")
         self.end_headers()
         self.wfile.write(html_stuff.html_error_template.format(e).encode('utf-8'))
-
-
 
     def do_GET_root(self, model):
         html = html_stuff.represent_html(model)
@@ -310,21 +298,6 @@ class HttpTestServer(BaseHTTPRequestHandler):
         plt.rc('font', size=9)
         plt.tight_layout()
         return plt.gcf()
-
-    def do_GET_chart(self, model):
-        pp = self.expenses_by_periods_plot(
-            model["selected_expenses_weekly"][0],
-            [a['value'] for a in model["selected_expenses_weekly"][1]]
-        )
-
-        figdata = BytesIO()
-        format = "png"
-        pp.savefig(figdata, format=format)
-
-        self.send_response(200)
-        self.send_header("Content-type", "image/" + format)
-        self.end_headers()
-        self.wfile.write(figdata.getvalue())
 
 
 if __name__ == "__main__":
