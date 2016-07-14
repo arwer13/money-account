@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from cgitb import html
 from collections import defaultdict
 import re
 import datetime
@@ -7,11 +6,9 @@ import bisect
 from functools import total_ordering
 from dateutil import rrule
 from dateutil.relativedelta import relativedelta
-from pprint import pprint
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
 import importlib
-from io import BytesIO
 
 import html_stuff
 import config
@@ -249,14 +246,42 @@ def make_model(bk):
 class LineFormatError(Exception):
     pass
 
+
+def get_money_txt(dropbox_token, money_txt_file_name='money.txt'):
+    import dropbox
+    dbx = dropbox.Dropbox(dropbox_token)
+    for entry in dbx.files_list_folder("").entries:
+        print(entry.name)
+        if entry.name == money_txt_file_name:
+            meta, res = dbx.files_download("/" + entry.name)
+            return res.content.decode()
+    return None
+
+
 class HttpTestServer(BaseHTTPRequestHandler):
 
     def load_data(self):
-        money_txt_path = os.environ.get("MONEY_TXT_PATH", config.money_txt_path)
-        with open(money_txt_path, "r", encoding="utf8") as ff:
-            text = ff.read()
-        start_index = text.find("\n\n\n")
-        if start_index != -1: text = text[start_index:]
+        MONEY_TXT_PATH_ENV = "MONEY_TXT_PATH"
+        DROPBOX_TOKEN_ENV = "DROPBOX_TOKEN"
+
+        if MONEY_TXT_PATH_ENV in os.environ:
+            print('Loading local money.txt from {}'.format(MONEY_TXT_PATH_ENV))
+            with open(os.environ[MONEY_TXT_PATH_ENV]) as ff:
+                text = ff.read()
+        elif DROPBOX_TOKEN_ENV in os.environ:
+            print('Loading local money.txt from Dropbox')
+            text = get_money_txt(os.environ[DROPBOX_TOKEN_ENV])
+            if text is None:
+                print('Can not load money.txt from Dropbox')
+        else:
+            print("Can not find any of environmental variables: {}".format(
+                ', '.join([MONEY_TXT_PATH_ENV, DROPBOX_TOKEN_ENV])))
+            self.server.shutdown()
+
+        start_index = text.find("START")
+        start_index = text.find("\n", start_index)
+        if start_index != -1:
+            text = text[start_index:]
         bk = Bookkeeper()
         for line in text.split("\n"):
             try:
@@ -301,6 +326,7 @@ class HttpTestServer(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    print('Started on port {}'.format(config.port))
     the_server = HTTPServer(("", config.port), HttpTestServer)
     try:
         the_server.serve_forever()
