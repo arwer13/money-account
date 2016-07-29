@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
+import os
+import sys
+import logging
 
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-import os
+
 import dropbox_stuff
-import datetime
+
+
+
 
 # Define a few command handlers. These usually take the two arguments bot and
 # update. Error handlers also receive the raised TelegramError object in error.
@@ -12,31 +17,31 @@ def start(bot, update):
 
 
 def echo(bot, update):
-    print("Got message: {}".format(update.message.text))
+    logging.info("Got message: {}".format(update.message.text))
 
     def msg_to_line(msg):
         categories = []
         money = 0
-        for arg in filter(None, msg.split()):
+        for arg in filter(None, msg.text.split()):
             try:
                 float(arg)
                 money = arg
             except ValueError:
                 categories.append(arg)
-        today_date = datetime.date.today().strftime("%Y.%m.%d")
-        return "{} {} {}\n".format(today_date, ", ".join(categories), money)
+        record_date = msg.date if msg.forward_date is None else msg.forward_date
+        return "{} {} {}\n".format(record_date.strftime("%Y.%m.%d"), ", ".join(categories), money)
 
     data = dropbox_stuff.get_money_txt(dropbox_token)
     if data[-1] not in ["\r", "\n"]:
         data += "\n"
-    data += msg_to_line(update.message.text)
+    data += msg_to_line(update.message)
     dropbox_stuff.set_money_txt(dropbox_token, data)
 
     bot.sendMessage(update.message.chat_id, text=update.message.text)
 
 
 def error(bot, update, error):
-    print('Update "%s" caused error "%s"' % (update, error))
+    logging.error('Update "%s" caused error "%s"' % (update, error))
 
 
 def start_bot(token):
@@ -56,6 +61,7 @@ def start_bot(token):
     dp.add_error_handler(error)
 
     # Start the Bot
+    logging.info("start polling")
     updater.start_polling()
 
     # Run the bot until the you presses Ctrl-C or the process receives SIGINT,
@@ -65,11 +71,11 @@ def start_bot(token):
 
 
 if __name__ == '__main__':
-    # print(os.environ)
-    token = os.environ["TELEGRAM_BOT_TOKEN"].strip('"')
-    print(token)
+    log_file = os.path.splitext(os.path.basename(sys.argv[0]))[0] + ".log"
+    logging.basicConfig(filename=log_file, level=logging.INFO,
+                        format="%(asctime)s %(levelname)s: %(message)s", datefmt="%Y.%m.%d %I:%M:%S")
+    token = os.environ["MONEY_TXT_TELEGRAM_BOT_TOKEN"].strip('"')
 
-    DROPBOX_TOKEN_ENV = "DROPBOX_TOKEN"
-    dropbox_token = os.environ[DROPBOX_TOKEN_ENV]
+    dropbox_token = os.environ["MONEY_TXT_DROPBOX_TOKEN"]
 
     start_bot(token)
