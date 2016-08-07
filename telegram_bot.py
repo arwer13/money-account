@@ -6,7 +6,8 @@ import logging
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
 import dropbox_stuff
-
+import money
+import config
 
 
 
@@ -37,7 +38,19 @@ def echo(bot, update):
     data += msg_to_line(update.message)
     dropbox_stuff.set_money_txt(dropbox_token, data)
 
-    bot.sendMessage(update.message.chat_id, text=update.message.text)
+    reply = "> " + update.message.text + "\n"
+    try:
+        bk = money.load_data(config)
+        model = money.make_model(bk, config.weekly_categories)
+    except Exception as e:
+        reply += str(e)
+    else:
+        num_categories = 4
+        monthly = model["monthly_by_categories"]
+        categories_info = ", ".join(["{}: {:.0f}".format(monthly[0][i], monthly[-1][i]["value"]) for i in range(4, 4 + num_categories + 1)])
+        reply += "Total: {:.0f}, spent this month: {:.0f} ({})".format(model["total_value"], monthly[-1][2], categories_info)
+
+    bot.sendMessage(update.message.chat_id, text=reply)
 
 
 def error(bot, update, error):
@@ -71,11 +84,14 @@ def start_bot(token):
 
 
 if __name__ == '__main__':
+    print("STARTED")
     log_file = os.path.splitext(os.path.basename(sys.argv[0]))[0] + ".log"
     logging.basicConfig(filename=log_file, level=logging.INFO,
                         format="%(asctime)s %(levelname)s: %(message)s", datefmt="%Y.%m.%d %I:%M:%S")
+    logging.info("Started")
     token = os.environ["MONEY_TXT_TELEGRAM_BOT_TOKEN"].strip('"')
-
+    logging.info("Telegram token is found")
     dropbox_token = os.environ["MONEY_TXT_DROPBOX_TOKEN"]
+    logging.info("Dropbox token is found")
 
     start_bot(token)
