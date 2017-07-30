@@ -41,6 +41,14 @@ def handle_record(bot, update):
     dropbox_stuff.set_money_txt(config.dropbox_token, data)
 
 
+def handle_last(bot, update):
+    """Handle command "last" to show last records (default 10)."""
+    data = dropbox_stuff.get_money_txt(config.dropbox_token)
+    num_last_records = 10
+    reply = "\n".join(list(filter(None, data.splitlines()))[-num_last_records:])
+    bot.sendMessage(update.message.chat_id, text=reply)
+
+
 def error(bot, update, error):
     logging.error('Update "%s" caused error "%s"' % (update, error))
 
@@ -54,6 +62,7 @@ def start_bot(token):
 
     # on different commands - answer in Telegram
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("last", handle_last))
 
     # on noncommand i.e message - echo the message on Telegram
     dp.add_handler(MessageHandler([Filters.text], handle_record))
