@@ -1,3 +1,5 @@
 port = 13000
 weekly_categories = [("food",), ("transport",), ("misc",)]
 month_period_day = 11
+telegram_bot_token = None  # Must be filled in.
+dropbox_token = None  # Must be filled in.

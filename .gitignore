@@ -1,4 +1,11 @@
-__pycache__/*
+# IDE related.
 .idea/*
+
+# Temporary.
+__pycache__/*
 *.pyc
 *.log
+
+# Configuration.
+config.py
+
