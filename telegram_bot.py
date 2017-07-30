@@ -6,12 +6,7 @@ import logging
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
 import dropbox_stuff
-import money
 import config
-
-
-dropbox_token = None
-"""Dropbox token, should be loaded at startup time."""
 
 
 # Define a few command handlers. These usually take the two arguments bot and
@@ -38,12 +33,12 @@ def handle_record(bot, update):
                 categories.append(arg)
         return "{} {} {}\n".format(record_date.strftime("%Y.%m.%d"), ", ".join(categories), money)
 
-    data = dropbox_stuff.get_money_txt(dropbox_token)
+    data = dropbox_stuff.get_money_txt(config.dropbox_token)
     if data[-1] not in ["\r", "\n"]:
         data += "\n"
     for line in text_lines:
         data += message_line_to_txt_line(line)
-    dropbox_stuff.set_money_txt(dropbox_token, data)
+    dropbox_stuff.set_money_txt(config.dropbox_token, data)
 
 
 def error(bot, update, error):
@@ -77,19 +72,18 @@ def start_bot(token):
 
 
 def main():
-    global dropbox_token
-    print("STARTED")
-    log_file = os.path.splitext(os.path.basename(sys.argv[0]))[0] + ".log"
-    logging.basicConfig(filename=log_file, level=logging.INFO,
+    # Logging setup.
+    log_file_path = os.path.splitext(os.path.basename(sys.argv[0]))[0] + ".log"
+    logging.basicConfig(filename=log_file_path, level=logging.INFO,
                         format="%(asctime)s %(levelname)s: %(message)s",
                         datefmt="%Y.%m.%d %I:%M:%S")
-    logging.info("Started")
-    token = os.environ["MONEY_TXT_TELEGRAM_BOT_TOKEN"].strip('"')
-    logging.info("Telegram token is found")
-    dropbox_token = os.environ["MONEY_TXT_DROPBOX_TOKEN"]
-    logging.info("Dropbox token is found")
 
-    start_bot(token)
+    logging.info("Started")
+    if config.telegram_bot_token is None:
+        logging.error("Telegram token is not set up.")
+    if config.dropbox_token is None:
+        logging.error("Dropbox token is not set up.")
+    start_bot(config.telegram_bot_token)
 
 
 if __name__ == '__main__':
