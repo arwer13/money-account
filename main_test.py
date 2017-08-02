@@ -48,5 +48,10 @@ class TestEntry(unittest.TestCase):
         self.assertEqual(actual, expected, '\n'+repr(expected.__dict__)+'\n'+(repr(actual.__dict__)))
 
 
+class TestDevelopment(unittest.TestCase):
+    def test_load_df(self):
+        df = load_df()
+
+
 if __name__ == "__main__":
     unittest.main()

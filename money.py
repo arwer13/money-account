@@ -4,6 +4,8 @@ import re
 import datetime
 from functools import total_ordering
 import logging
+import io
+import csv
 
 import pandas as pd
 from dateutil import rrule
@@ -139,20 +141,25 @@ def load_money_txt_lines():
 
 def load_df():
     logging.info("Started loading data frame")
-    df = pd.DataFrame()
-    for line in load_money_txt_lines():
-        e = Entry(line)
-        d = {
-            "value": e.value,
-            "cat1": e.cats[0] if len(e.cats) > 0 else None,
-            "cat2": e.cats[1] if len(e.cats) > 1 else None,
-            "cat3": e.cats[2] if len(e.cats) > 2 else None,
-            "date": e.day,
-            "note": e.note,
-            "cmd": e.cmd,
-        }
-        df = df.append(d, ignore_index=True)
-    logging.info("Finished loading data frame")
+    delimiter = ","
+    with io.StringIO() as csv_file:
+        writer = csv.writer(csv_file, delimiter=delimiter)
+        header = ["date", "cmd", "value", "cat1", "cat2", "cat3", "note", ]
+        writer.writerow(header)
+        for line in load_money_txt_lines():
+            e = Entry(line)
+            row = [
+                e.day,
+                e.cmd,
+                e.value,
+                e.cats[0] if len(e.cats) > 0 else None,
+                e.cats[1] if len(e.cats) > 1 else None,
+                e.cats[2] if len(e.cats) > 2 else None,
+                e.note,
+            ]
+            writer.writerow(row)
+        csv_file.seek(0)
+        df = pd.read_csv(csv_file, sep=delimiter)
     return df
 
 
