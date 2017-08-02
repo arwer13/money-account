@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 import unittest
-from main import *
 import datetime
-import html_stuff
+
+from money import *
+
 
 class TestEntry(unittest.TestCase):
-
     def test_full_line(self):
         line = "2015.07.09   food, milk  67+77,3+51+41+57.0+36+40 #tinned-food имудон, #tag2 40т"
         a = Entry()
@@ -46,49 +46,6 @@ class TestEntry(unittest.TestCase):
         expected.cats = ('food', 'cheese')
         expected.value = -22
         self.assertEqual(actual, expected, '\n'+repr(expected.__dict__)+'\n'+(repr(actual.__dict__)))
-
-    def test_model(self):
-        self.skipTest('Not up-to-date, needs ref')
-        lines = """
-    2015.07.25 food, fish 200
-    2015.07.11 cats, fish 100
-    2015.07.26 salary; some_place +1000
-    2015.08.03 salary; some_place +8000
-
-    2015.08.25 food, fish 200
-    2015.08.11 cats, fish 100
-    2015.08.20 salary; some_place +10000
-    2015.09.05 salary; some_place +15000
-    2015.09.10 food, meat 500
-    2015.08.30 food 100
-    2015.09.05 entertainment 300
-"""
-        bk = Bookkeeper()
-        for a in lines.splitlines(keepends=False):
-            bk.account(Entry(a))
-        model = make_model(bk)
-        em = dict()
-        em["total_value"] = -200-100+1000+8000-200-100+10000+15000-500-100-300
-        # em["selected_expenses_weekly"] =
-        for k in set(em.keys()).intersection(set(model.keys())):
-            self.assertEqual(model[k], em[k])
-
-
-
-class TestHtmlStuff(unittest.TestCase):
-
-    def test_make_html_table(self):
-        self.skipTest('obsolete')
-        table = [
-            ["cats", "dogs", "platypuses"],
-            [1,2,3]
-        ]
-        html_should_be = """<table>
-<tr><td>cats</td><td>dogs</td><td>platypuses</td></tr>
-<tr><td>1</td><td>2</td><td>3</td></tr>
-</table>"""
-        html = html_stuff.make_table(table)
-        self.assertEqual(html, html_should_be)
 
 
 if __name__ == "__main__":

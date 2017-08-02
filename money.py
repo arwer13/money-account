@@ -1,11 +1,34 @@
-from collections import defaultdict
-import re
+#!/usr/bin/env python3
 import os
+import re
 import datetime
-import bisect
 from functools import total_ordering
+import logging
+
+import pandas as pd
 from dateutil import rrule
 from dateutil.relativedelta import relativedelta
+
+
+DEFAULT_MONEY_TXT_PATH = os.path.join(os.path.expanduser("~"),
+                                      "Dropbox/Apps/money.txt-dev/money.txt")
+MONEY_TXT_PATH_ENV = "MONEY_TXT_PATH"
+DROPBOX_TOKEN_ENV = "MONEY_TXT_DROPBOX_TOKEN"
+
+
+def get_total(df):
+    """Get total current value.
+
+    Args:
+        df: Data frame with all records, including milestones.
+
+    Returns:
+        float total current value.
+    """
+    last_milestone_id = df[df.cmd.notnull()].tail(1).index.get_values()[0]
+    total = df[last_milestone_id:].value.sum()
+    return total
+
 
 @total_ordering
 class Entry:
@@ -66,209 +89,81 @@ class Entry:
         return self.day > other.day
 
 
-class Bookkeeper:
-
-    def __init__(self, month_start_day, weekly_categories):
-        self.entries = []
-        self.last_day = None
-        self.month_start_day = month_start_day
-        self.weekly_categories = weekly_categories
-
-    def closest_monday(self, date):
-        date -= datetime.timedelta(days=date.weekday())
-        return date
-
-    # scary way to step back to known date
-    def closest_month_beginning(self, date):
-        while date.day != self.month_start_day:
-            date -= datetime.timedelta(days=1)
-        return date
-
-    def filter(self, period=None, cats=None, tags=None, sign=None, cmds=(None,)):
-        result = self.entries
-        result = list(filter(lambda x: x.cmd in cmds, result))
-
-        if sign == "+":
-            result = filter(lambda a: a.value > 0, result)
-        elif sign == "-":
-            result = filter(lambda a: a.value < 0, result)
-
-        if period is not None:
-            pr = [None, None]
-            pr[0] = period[0] if period[0] is not None else self.entries[0].day
-            pr[1] = period[1] if period[1] is not None else datetime.date.today()
-            result = filter(lambda x: pr[0] <= x.day <= pr[1], result)
-
-        if cats is not None:
-            filtered_by_cats = list()
-            for e in result:
-                for c in cats:
-                    if len(e.cats) >= len(c) and all([e.cats[i] == c[i] for i in range(len(c))]):
-                        filtered_by_cats.append(e)
-                        continue
-            result = filtered_by_cats
-
-        if tags is not None:
-            result = filter(lambda x: x.tags.intersection(tags) != set(), result)
-
-        return result
-
-    def account(self, line):
-        if line == "":
-            return
-        e = Entry(line, self.last_day)
-        self.last_day = e.day
-        if e != Entry():
-            if len(self.entries) > 0 and self.entries[-1].day >= e.day:
-                self.entries.append(e)
-            else:
-                bisect.insort_right(self.entries, e)
-
-    def get_total_value(self):
-        # milestone = self.milestones[-1]
-        # return milestone[2] + sum([e.value for e in self.filter(period=(milestone[0], datetime.date.today()))])
-        result = 0.0
-        for e in self.entries:
-            if e.cmd == "milestone":
-                result = e.value
-            else:
-                result += e.value
-        return result
-
-    def every_calendar_weak(self):
-        result = dict()
-        start_date = self.closest_monday(min(e.day for e in self.entries))
-        for dt in rrule.rrule(rrule.WEEKLY, dtstart=start_date, until=datetime.date.today()):
-            period = dt.date(), dt.date() + datetime.timedelta(days=6)
-            week_expenses = self.filter(period=period, sign="-", cats=self.weekly_categories)
-            week_expenses = list(week_expenses)
-            notes = [str(x) for x in week_expenses]
-            value = -sum(map(lambda x: x.value, week_expenses))
-            result[period] = {"value": value, "note": notes}
-        return result
-
-    def expenses_by_top_categories(self, entries=None):
-        if entries is None:
-            entries = self.entries
-        result = defaultdict(lambda : {"value": 0.0, "note": []})
-        for x in filter(lambda x: x.value < 0, entries):
-            cat = x.cats[:1]
-            result[cat]["value"] += -x.value
-            result[cat]["note"].append(str(x))
-        return result
-
-    def monthly_by_categories(self):
-        start_date = self.closest_month_beginning(min(e.day for e in self.entries))
-        result = defaultdict(list)
-        for dt in rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=datetime.date.today()):
-            period = dt.date(), dt.date() + relativedelta(months=1) - relativedelta(days=1)
-            result[period] = self.filter(period=period)
-        result = {k: self.expenses_by_top_categories(v) for k, v in result.items()}
-        return result
-
-    def all_categories(self):
-        result = set()
-        for et in self.entries:
-            result.add(et.cats)
-        return result
-
-
-model_template = {
-    "title": None,
-    "total_value": None,
-    "current_date": None,
-    "monthly_by_categories": None
-}
-
-
-def make_model(bk, weekly_categories):
-    result = dict()
-    result["total_value"] = bk.get_total_value()
-
-    expenses_weekly = bk.every_calendar_weak()
-    expenses_array = [[], []]
-    for i, period in enumerate(sorted(expenses_weekly.keys())):
-        begin = period[0].strftime("%d.%m")
-        end = period[1].strftime("%d.%m")
-        # end = (period[1] - datetime.timedelta(days=1)).strftime("%d.%m")
-        expenses_array[0].append("{}-{}".format(begin, end))
-        expenses_array[1].append(expenses_weekly[period])
-    result["selected_expenses_weekly"] = expenses_array
-    result["weekly_categories"] = ", ".join([x[0] for x in weekly_categories])
-
-    monthly_by_categories = bk.monthly_by_categories()
-    all_categories = list({c for mv in monthly_by_categories.values() for c in mv})
-    all_categories = sorted(all_categories,
-                            key=lambda cc: sum([mm[cc]["value"] for mm in monthly_by_categories.values()]), reverse=True)
-    array = [["Month", "Income", "Total spent", "Balance"] + [c[0] for c in all_categories]]
-    for m in sorted(monthly_by_categories.keys()):
-        mv = monthly_by_categories[m]
-        month = "{} {} ({}-{})".format(m[0].strftime("%Y"), m[0].strftime("%B"), m[0].strftime("%d.%m"), m[1].strftime("%d.%m"))
-        total_spent = sum([x["value"] for x in mv.values()])
-        income = {"value": 0, "note": []}
-        for x in bk.filter(period=m, sign="+"):
-            income["value"] += x.value
-            income["note"].append(str(x))
-        balance = income["value"] - total_spent
-        row = [month, income, total_spent, balance]
-        for c in all_categories:
-            row.append(mv.get(c, 0))
-        array.append(row)
-    result["monthly_by_categories"] = array
-
-    errors_arr = [[], []]
-    current_value = 0.0
-    left_date = bk.entries[0].day
-    for e in bk.filter(cmds=(None, "milestone")):
-        if e.cmd == "milestone":
-            period = "{}-{}".format(left_date.strftime("%d.%m"), e.day.strftime("%d.%m"))
-            errors_arr[0].append(period)
-            cell = {
-                "value":  e.value - current_value,
-                "note": ["Accounted: {:.0f}".format(current_value), "Actual: {:.0f}".format(e.value)]
-            }
-            errors_arr[1].append(cell)
-            current_value = e.value
-            left_date = e.day
-        else:
-            current_value += e.value
-
-    result["errors"] = errors_arr
-
-    return result
-
-
-class LineFormatError(Exception):
-    pass
-
-
-def load_data(config):
-    MONEY_TXT_PATH_ENV = "MONEY_TXT_PATH"
-    DROPBOX_TOKEN_ENV = "MONEY_TXT_DROPBOX_TOKEN"
-
+def load_money_txt():
     if MONEY_TXT_PATH_ENV in os.environ:
-        print('Loading local money.txt from {}'.format(MONEY_TXT_PATH_ENV))
         with open(os.environ[MONEY_TXT_PATH_ENV]) as ff:
             text = ff.read()
     elif DROPBOX_TOKEN_ENV in os.environ:
-        print('Loading local money.txt from Dropbox')
         import dropbox_stuff
         text = dropbox_stuff.get_money_txt(os.environ[DROPBOX_TOKEN_ENV])
         if text is None:
             print('Can not load money.txt from Dropbox')
+    elif os.path.exists(DEFAULT_MONEY_TXT_PATH):
+        with open(DEFAULT_MONEY_TXT_PATH) as ff:
+            text = ff.read()
     else:
-        raise RuntimeError("Can not find any of environmental variables: {}".format(
-            ', '.join([MONEY_TXT_PATH_ENV, DROPBOX_TOKEN_ENV])))
+        raise RuntimeError(
+            "Can not find any of environmental variables: {}. "
+            "And there is no file at default path {}".format(
+                ', '.join([MONEY_TXT_PATH_ENV, DROPBOX_TOKEN_ENV]),
+                DEFAULT_MONEY_TXT_PATH))
+    return text
 
+
+def save_money_txt(data):
+    if MONEY_TXT_PATH_ENV in os.environ:
+        with open(os.environ[MONEY_TXT_PATH_ENV], "w") as ff:
+            ff.write(data)
+    elif DROPBOX_TOKEN_ENV in os.environ:
+        import dropbox_stuff
+        dropbox_stuff.set_money_txt(os.environ[DROPBOX_TOKEN_ENV], data)
+    elif os.path.exists(DEFAULT_MONEY_TXT_PATH):
+        with open(DEFAULT_MONEY_TXT_PATH, "w") as ff:
+            ff.write(data)
+    else:
+        raise RuntimeError(
+            "Can not find any of environmental variables: {}. "
+            "And there is no file at default path {}".format(
+                ', '.join([MONEY_TXT_PATH_ENV, DROPBOX_TOKEN_ENV]),
+                DEFAULT_MONEY_TXT_PATH))
+
+
+def load_money_txt_lines():
+    text = load_money_txt()
     start_index = text.find("START")
     start_index = text.find("\n", start_index)
     if start_index != -1:
         text = text[start_index:]
-    bk = Bookkeeper(config.month_period_day, config.weekly_categories)
-    for line in text.split("\n"):
-        try:
-            bk.account(line)
-        except Exception as e:
-            raise LineFormatError('Error\n{}\nprocessing line\n{}'.format(e, line))
+    return filter(None, text.splitlines())
 
-    return bk
+
+def load_df():
+    logging.info("Started loading data frame")
+    df = pd.DataFrame()
+    for line in load_money_txt_lines():
+        e = Entry(line)
+        d = {
+            "value": e.value,
+            "cat1": e.cats[0] if len(e.cats) > 0 else None,
+            "cat2": e.cats[1] if len(e.cats) > 1 else None,
+            "cat3": e.cats[2] if len(e.cats) > 2 else None,
+            "date": e.day,
+            "note": e.note,
+            "cmd": e.cmd,
+        }
+        df = df.append(d, ignore_index=True)
+    logging.info("Finished loading data frame")
+    return df
+
+
+def split_monthly(period, first_day):
+    assert len(period) == 2
+    assert 1 <= first_day <= 28
+
+    periods = list()
+    for dt in rrule.rrule(rrule.MONTHLY, dtstart=period[0],
+                          until=period[1]):
+        periods.append((dt.date(),
+                       dt.date() + relativedelta(months=1)
+                       - relativedelta(days=1)))
+    return periods
