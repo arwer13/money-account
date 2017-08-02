@@ -25,13 +25,24 @@ def handle_record(bot, update):
     def message_line_to_txt_line(msg):
         categories = []
         money = 0
-        for arg in filter(None, msg.replace(",", " ").split(" ")):
+        description_delimiter = 4 * " "
+        parts = list(filter(None, msg.split(description_delimiter)))
+        print(parts)
+        description = parts[1].strip() if len(parts) > 1 else ""
+        msg_without_description = parts[0]
+        for arg in filter(None,
+                          msg_without_description.replace(",", " ")
+                          .split(" ")):
             try:
                 float(arg)
                 money = arg
             except ValueError:
                 categories.append(arg)
-        return "{} {} {}\n".format(record_date.strftime("%Y.%m.%d"), ", ".join(categories), money)
+        return "{} {} {} {}\n".format(
+            record_date.strftime("%Y.%m.%d"),
+            ", ".join(categories),
+            money,
+            description).strip()
 
     data = money.load_money_txt()
     if data[-1] not in ["\r", "\n"]:
