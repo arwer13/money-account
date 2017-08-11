@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import unittest
 import datetime
 
@@ -7,13 +8,13 @@ from money import *
 
 class TestEntry(unittest.TestCase):
     def test_full_line(self):
-        line = "2015.07.09   food, milk  67+77,3+51+41+57.0+36+40 #tinned-food имудон, #tag2 40т"
+        line = u"2015.07.09   food, milk  67+77,3+51+41+57.0+36+40 #tinned-food имудон, #tag2 40т"
         a = Entry()
         a.cats = ("food", "milk")
         a.day = datetime.date(2015, 7, 9)
         a.tags = ["tinned-food", "tag2"]
         a.value = -eval("67+77.3+51+41+57+36+40")
-        a.note = "имудон, 40т"
+        a.note = u"имудон, 40т"
         self.assertEqual(Entry(line), a)
 
     def test_positive_value(self):
@@ -51,6 +52,8 @@ class TestEntry(unittest.TestCase):
 class TestDevelopment(unittest.TestCase):
     def test_load_df(self):
         df = load_df()
+        d = df.tail(10)
+        x = 1
 
 
 if __name__ == "__main__":
