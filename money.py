@@ -93,6 +93,9 @@ class Entry:
     def __gt__(self, other):
         return self.day > other.day
 
+    def is_empty(self):
+        return len(self.cats) == 0 and self.cmd is None
+
 
 def load_money_txt():
     if MONEY_TXT_PATH_ENV in os.environ:
@@ -159,6 +162,8 @@ def load_df():
         writer.writerow(header)
         for line in load_money_txt_lines():
             e = Entry(line)
+            if e.is_empty():
+                continue
             row = [
                 e.day,
                 e.cmd,
@@ -185,3 +190,26 @@ def split_monthly(period, first_day):
                        dt.date() + relativedelta(months=1)
                        - relativedelta(days=1)))
     return periods
+
+
+def for_period(df, first_day, last_day):
+    first_day_str = first_day.strftime("%Y-%m-%d")
+    last_day_str = last_day.strftime("%Y-%m-%d")
+    df["lines_order"] = df.index
+    df = df.sort_values(["date", "lines_order"])
+    before_first_day = df[df.date < first_day_str]
+    if len(before_first_day) == 0:
+        start_index = 0
+    else:
+        start_index = before_first_day.index[-1] + 1
+    after_last_day = df[df.date > last_day_str]
+    if len(after_last_day) == 0:
+        finish_index = df.index[-1]
+    else:
+        finish_index = after_last_day.index[0] - 1
+
+    return df[start_index:finish_index+1]
+
+
+def by_cat1(df):
+    return df.groupby("cat1").sum().sort_values("value")

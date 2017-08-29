@@ -10,28 +10,57 @@ import money
 app = flask.Flask(__name__)
 
 
-DEFAULT_MONEY_TXT_PATH = os.path.join(os.path.expanduser("~"),
-                                      "Dropbox/Apps/money.txt-dev/money.txt")
-MONEY_TXT_PATH_ENV = "MONEY_TXT_PATH"
-DROPBOX_TOKEN_ENV = "MONEY_TXT_DROPBOX_TOKEN"
+BY_CATEGORIES_TEMPLATE = """<html>
+<body>
+    <h1>Income</h1>
+    Total income: {total_income}
+    {income}
+    <h1>Expenses</h1>
+    Total: {total_expenses}
+    {expenses}
+</body>
+</html>
+"""
+
+DATE_FORMAT = "%Y-%m-%d"
 
 
 @app.route("/")
 def route_index():
     args = flask.request.args
-    begin = args.get("begin")
-    begin = datetime.date.today() \
-        if begin is None \
-        else datetime.datetime.strptime(begin, "%Y-%m-%d").date()
-    end = args.get("end")
-    end = datetime.date.today() \
-        if end is None \
-        else datetime.datetime.strptime(end, "%Y-%m-%d").date()
+    print(args)
+    today_str = datetime.date.today().strftime(DATE_FORMAT)
+
+    def str_to_date(s):
+        return datetime.datetime.strptime(s, DATE_FORMAT).date()
+
+    first_day = str_to_date(args.get("first_day", today_str))
+    last_day = str_to_date(args.get("last_day", today_str))
 
     df = money.load_df()
-    for_period = df[df.value < 0.0][df.date >= begin][df.date <= end]\
-        .groupby(by="cat1").sum().sort_values("value")
-    return for_period.to_html()
+    for_period = money.for_period(df, first_day, last_day)
+    if len(for_period) == 0:
+        return "No records for this period."
+    by_cat1 = money.by_cat1(for_period)
+
+    result = by_cat1[["value"]]
+    result.value = result.value.astype(int)
+
+    # Income.
+    income = result[result.value > 0.0]
+    total_income = income.value.sum()
+
+    # Expenses.
+    expenses = result[result.value <= 0.0]
+    expenses.value = -expenses.value
+    total_expenses = expenses.value.sum()
+
+    return BY_CATEGORIES_TEMPLATE.format(**{
+        "income": income.to_html(),
+        "expenses": expenses.to_html(),
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+    })
 
 
 @app.route("/value")
@@ -43,8 +72,3 @@ def route_value():
 
 if __name__ == "__main__":
     app.run()
-    # df = load_df()
-    # pass
-    # whole_period = df.at[0, 'date'], df.at[len(df)-1, 'date']
-    # periods = split_monthly(whole_period, 1)
-    # print(df)
