@@ -149,16 +149,15 @@ def load_df():
     logging.info("Started loading data frame")
     delimiter = ","
 
-    def get_file_object():
+    def get_temp_file_object():
         if sys.version_info[0] > 2:
             return io.StringIO()
         else:
             return tempfile.TemporaryFile("w+")
 
-    # with io.StringIO() as csv_file:
-    with get_file_object() as csv_file:
+    with get_temp_file_object() as csv_file:
         writer = csv.writer(csv_file, delimiter=delimiter)
-        header = [u"date", u"cmd", u"value", u"cat1", u"cat2", u"cat3", u"note", ]
+        header = ["date", "cmd", "value", "cat1", "cat2", "cat3", "note", ]
         writer.writerow(header)
         for line in load_money_txt_lines():
             e = Entry(line)
